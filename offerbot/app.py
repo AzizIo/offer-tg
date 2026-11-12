@@ -5,6 +5,8 @@ import os
 from uuid import uuid4
 
 from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     InlineQueryResultArticle,
     InputTextMessageContent,
     LinkPreviewOptions,
@@ -112,8 +114,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "🔒 <b>Для использования сервиса подпишитесь на канал.</b>\n\n"
             f"https://t.me/{settings.sub_channel}\n\nПосле подписки нажмите «Проверить подписку».",
             parse_mode=ParseMode.HTML,
-            reply_markup=__import__("telegram").InlineKeyboardMarkup([[
-                __import__("telegram").InlineKeyboardButton("✅ Проверить подписку", callback_data="subscription:check")
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Проверить подписку", callback_data="subscription:check")
             ]]),
         )
         return
@@ -260,10 +262,11 @@ async def my_offers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "cancelled": "отменён",
         "expired": "истёк",
     }
+    from html import escape
     lines = ["<b>Последние предложения</b>\n"]
     for row in rows:
         lines.append(
-            f"#{row['id']} · <b>{row['gift_name']}</b> · {row['price']} ⭐\n"
+            f"#{row['id']} · <b>{escape(str(row['gift_name']))}</b> · {escape(str(row['price']))} ⭐\n"
             f"Статус: {labels.get(row['status'], row['status'])}"
         )
     await message.reply_text("\n\n".join(lines), parse_mode=ParseMode.HTML)
@@ -346,7 +349,7 @@ async def notify_creator(context: ContextTypes.DEFAULT_TYPE, offer: dict, text: 
 
 async def edit_offer_message(query, text: str, reply_markup=None) -> None:
     if query.inline_message_id:
-        await query.edit_message_text(
+        await query.get_bot().edit_message_text(
             text=text,
             inline_message_id=query.inline_message_id,
             parse_mode=ParseMode.HTML,
