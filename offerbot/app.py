@@ -226,6 +226,57 @@ async def revoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await message.reply_text("✅ Подписка отозвана." if revoked else "У пользователя нет активной записи подписки.")
 
 
+async def cancel_offer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message:
+        return
+    if len(context.args) != 1:
+        await message.reply_text("Использование: /canceloffer OFFER_ID")
+        return
+    try:
+        offer_id = int(context.args[0])
+        if offer_id <= 0:
+            raise ValueError
+    except ValueError:
+        await message.reply_text("OFFER_ID должен быть положительным числом.")
+        return
+
+    storage = get_storage(context)
+    try:
+        offer = storage.resolve_offer(offer_id, actor_id=user.id, action="cancelled")
+    except OfferNotFound:
+        await message.reply_text("Оффер не найден.")
+        return
+    except OfferAlreadyResolved:
+        await message.reply_text("Оффер уже обработан.")
+        return
+    except OfferExpired:
+        await message.reply_text("Срок действия оффера уже истёк.")
+        return
+    except OfferPermissionDenied:
+        await message.reply_text("Отменить оффер может только его автор.")
+        return
+
+    result_text = make_resolved_text(offer, "cancelled", user.full_name or str(user.id))
+    chat_id = offer.get("source_chat_id")
+    source_message_id = offer.get("source_message_id")
+    if chat_id and source_message_id:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=int(chat_id),
+                message_id=int(source_message_id),
+                business_connection_id=offer.get("source_business_connection_id"),
+                text=result_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=resolved_keyboard(offer, str(offer.get("language") or "ru")),
+                link_preview_options=LinkPreviewOptions(is_disabled=False),
+            )
+        except TelegramError:
+            logger.info("Could not edit cancelled offer message id=%s", offer_id)
+    await message.reply_text("✅ Оффер отменён.")
+
+
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     message = update.effective_message
@@ -390,6 +441,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = query.from_user
     storage = get_storage(context)
 
+    # Keep buttons already sent by the legacy version operational after migration.
+    if data.startswith(("accept:", "reject:", "how:")):
+        legacy_action, legacy_id = data.split(":", 1)
+        action_alias = {"accept": "accept", "reject": "reject", "how": "how"}
+        data = f"offer:{action_alias[legacy_action]}:{legacy_id}"
+
     if data == "menu:help":
         await query.answer()
         await context.bot.send_message(
@@ -446,6 +503,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.answer()
             await context.bot.send_message(
                 chat_id=query.message.chat_id if query.message else user.id,
+                business_connection_id=getattr(query.message, "business_connection_id", None) if query.message else None,
                 text=tr(language, "how_text"),
                 parse_mode=ParseMode.HTML,
                 reply_to_message_id=query.message.message_id if query.message else None,
@@ -606,6 +664,7 @@ async def post_init(application: Application) -> None:
         BotCommand("start", "Открыть меню"),
         BotCommand("help", "Инструкция"),
         BotCommand("myoffers", "Мои предложения"),
+        BotCommand("canceloffer", "Отменить свой оффер"),
         BotCommand("stats", "Статистика (админ)"),
         BotCommand("grant", "Выдать подписку (админ)"),
         BotCommand("revoke", "Отозвать подписку (админ)"),
@@ -642,6 +701,7 @@ def main() -> None:
     application.add_handler(CommandHandler("revoke", revoke_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("myoffers", my_offers))
+    application.add_handler(CommandHandler("canceloffer", cancel_offer_command))
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(InlineQueryHandler(inline_query))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, create_offer_from_message))
