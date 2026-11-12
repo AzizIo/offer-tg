@@ -4,13 +4,15 @@ A Telegram bot for creating and managing collectible-gift offers. Version 2 focu
 
 ## Product boundary
 
-Offer TG creates and tracks an offer only. The amount shown in Stars is an advertised price. The bot does not debit, escrow, reserve, refund, or transfer Stars, and it does not transfer Telegram gifts. The buyer and seller complete payment and gift transfer separately. An accepted status means only that a user pressed Accept.
+Offer TG creates and tracks a third-party offer only. The amount shown in Stars is an advertised price. The bot does not debit, escrow, reserve, refund, or transfer Stars, and it does not transfer Telegram gifts. The buyer and seller complete payment and gift transfer separately. An accepted status means only that a user pressed Accept.
+
+Telegram's official gift-purchase offer is a Telegram-generated service message. Its `payments.sendStarGiftOffer` method is a user-only MTProto method, not a Bot API method. This bot therefore renders an explicitly branded "Offer TG" message with a clear third-party disclaimer; it does not pretend to create Telegram's official centered service message. See the [official Telegram Gifts API](https://core.telegram.org/api/gifts), [sendStarGiftOffer method](https://core.telegram.org/method/payments.sendStarGiftOffer), and [Telegram's anti-scam guidance](https://www.t.me/s/FAQTelegram/3126?q=%23scam).
 
 Native Telegram gift-purchase offers and escrow are explicitly out of scope for this release.
 
 ## Features
 
-- Telegram-style offer message with Premium emoji and Accept / Decline actions.
+- Compact Offer TG-branded offer message with a gift-link preview and plain Accept / Decline actions.
 - Public offers, or offers addressed to a specific user by replying to that person's message in a group.
 - Creator-only cancellation; the creator cannot accept or decline their own offer.
 - Atomic status transitions, expiry checks, and audit events.
@@ -21,6 +23,7 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
 - RU, EN, Chinese, and Arabic offer cards and action buttons.
 - Inline query offer creation.
 - Telegram Business message replies and edits use the stored business connection ID.
+- .env is loaded explicitly from the project root; process environment variables override it.
 - Docker image and Compose deployment files.
 - Automated tests and GitHub Actions.
 
@@ -41,8 +44,9 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
        python -m pip install -e ".[dev]"
 
 3. Copy .env.example to .env and configure at least BOT_TOKEN and OWNER_ID.
-4. Keep DB_PATH=offers.db if the existing deployment uses the legacy offers.db file.
-5. Start the application:
+4. The app loads .env from the repository root before reading settings, even when launched from another working directory. Existing environment variables (for example Docker/systemd variables) take precedence over .env.
+5. Keep DB_PATH=offers.db if the existing deployment uses the legacy offers.db file.
+6. Start the application:
 
        python "bot3 (1).py"
 
@@ -70,7 +74,7 @@ The container runs as a non-root user (UID 10001). Never run two bot processes a
 
 | Variable | Required | Description |
 |---|---:|---|
-| BOT_TOKEN | Yes | Fresh Telegram bot token; never put it in source control |
+| BOT_TOKEN | Yes | Fresh Telegram bot token; loaded from the project-root .env or process environment; never put it in source control |
 | OWNER_ID | Yes | Numeric Telegram ID of the product owner |
 | OWNER_USERNAME | No | Public support username used in menu links |
 | ADMIN_IDS | No | Comma-separated trusted admin IDs |
