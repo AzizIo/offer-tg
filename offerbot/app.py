@@ -938,7 +938,7 @@ def main() -> None:
     application.add_handler(CommandHandler("canceloffer", cancel_offer_command))
     application.add_handler(CommandHandler("businessoffer", business_offer_command))
     application.add_handler(BusinessConnectionHandler(business_connection_update))
-    application.add_handler(MessageHandler(filters.UpdateType.BUSINESS_MESSAGE, business_message))
+    application.add_handler(MessageHandler(filters.UpdateType.BUSINESS_MESSAGE, business_message), group=-1)
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(InlineQueryHandler(inline_query))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, create_offer_from_message))
