@@ -72,7 +72,9 @@ class Settings:
             owner_id=owner_id,
             admin_ids=frozenset(admin_ids),
             sub_channel=os.getenv("SUB_CHANNEL", "").strip().lstrip("@"),
-            db_path=Path(os.getenv("DB_PATH", "./data/offers.sqlite3")),
+            # The legacy bot used ./offers.db. Keep that default so the first
+            # V2 startup migrates existing users/offers instead of starting empty.
+            db_path=Path(os.getenv("DB_PATH", "offers.db")),
             default_offer_ttl_hours=ttl,
             normal_daily_offers=_positive_int("NORMAL_DAILY_OFFERS", 20),
             vip_daily_offers=_positive_int("VIP_DAILY_OFFERS", 200),
