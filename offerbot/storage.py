@@ -300,7 +300,8 @@ class Storage:
         if not row:
             return None
         result = dict(row)
-        result["price_stars"] = int(result["price"])
+        # Preserve historical decimal prices from the legacy parser; new offers use integer Stars.
+        result["price_stars"] = result["price"]
         return result
 
     def resolve_offer(self, offer_id: int, actor_id: int, action: str) -> dict:
@@ -367,7 +368,8 @@ class Storage:
                 offer["status"] = action
                 offer["resolved_by"] = actor_id
                 offer["resolved_at"] = now_iso
-                offer["price_stars"] = int(offer["price"])
+                # Keep legacy decimal price strings readable in the card renderer.
+                offer["price_stars"] = offer["price"]
                 resolved_offer = offer
 
         if expired:
