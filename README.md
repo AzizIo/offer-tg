@@ -18,8 +18,9 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
 - Existing users and offers are preserved.
 - Admin-only grant, revoke, and statistics commands.
 - Configurable daily offer limits for Normal and VIP.
-- RU and EN offer cards; zh and ar currently fall back to Russian.
+- RU, EN, Chinese, and Arabic offer cards and action buttons.
 - Inline query offer creation.
+- Telegram Business message replies and edits use the stored business connection ID.
 - Automated tests and GitHub Actions.
 
 ## Requirements
@@ -66,7 +67,7 @@ The legacy filename remains as a compatibility launcher. The new implementation 
 
     !продаёшь? https://t.me/nft/Gift-123 100 ru
 
-The price must be a positive whole number of Stars. Supported language codes are ru, en, zh, and ar. The current message catalog contains Russian and English; zh and ar fall back to Russian until their reviewed translations are added.
+The price must be a positive whole number of Stars. Supported language codes are ru, en, zh, and ar. The message catalog includes Russian, English, Chinese, and Arabic.
 
 In a group, reply to a person's message with the offer command to address the offer to that person. Otherwise the offer is open to everyone except its creator.
 
@@ -95,7 +96,7 @@ The original bot used offers.db. V2 defaults to that same path, so the first sta
 ## Roadmap
 
 1. Complete security and offer-state hardening.
-2. Test the UX in private chats, groups, and Telegram Business connections.
+2. Run end-to-end UX tests in private chats, groups, inline mode, and Telegram Business connections.
 3. Build a real admin interface and subscription checkout.
 4. Add operational monitoring, backups, and deployment automation.
 5. Evaluate native Telegram gift offers as a separate future integration.
