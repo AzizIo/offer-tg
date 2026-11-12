@@ -2,38 +2,22 @@ from __future__ import annotations
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from .presentation import EMOJI, tr
+from .presentation import tr
 
 
 def offer_keyboard(offer_id: int, language: str = "ru") -> InlineKeyboardMarkup:
+    """Two primary actions, matching the minimal offer action layout."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
                 tr(language, "reject_button"),
                 callback_data=f"offer:reject:{offer_id}",
-                icon_custom_emoji_id=EMOJI["reject"],
             ),
             InlineKeyboardButton(
                 tr(language, "accept_button"),
                 callback_data=f"offer:accept:{offer_id}",
-                icon_custom_emoji_id=EMOJI["accept"],
             ),
         ],
-    ])
-
-
-def resolved_keyboard(offer: dict, language: str = "ru") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                tr(language, "open_gift"),
-                url=offer["gift_link"],
-            ),
-            InlineKeyboardButton(
-                tr(language, "how_button"),
-                callback_data=f"offer:how:{int(offer['id'])}",
-            ),
-        ]
     ])
 
 
