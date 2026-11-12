@@ -74,6 +74,64 @@ MESSAGES = {
         "expired_alert": "This offer has expired.",
         "access_denied": "You are not allowed to perform this action.",
     },
+    "zh": {
+        "offer_title": "礼物购买报价",
+        "price_for": "购买",
+        "seller": "发送者",
+        "expires": "剩余有效时间",
+        "external_note": "此报价由第三方服务提供。机器人不会预留 Stars，也不会转移礼物。",
+        "accepted": "✅ <b>报价已接受</b>",
+        "rejected": "❌ <b>报价已拒绝</b>",
+        "cancelled": "↩️ <b>报价已取消</b>",
+        "expired": "⌛ <b>报价已过期</b>",
+        "accepted_body": "用户 <b>{actor}</b> 已接受以 <b>{price} ⭐</b> 购买礼物 <a href=\"{link}\"><b>{gift}</b></a> 的报价。",
+        "rejected_body": "用户 <b>{actor}</b> 已拒绝礼物 <a href=\"{link}\"><b>{gift}</b></a> 的报价。",
+        "cancelled_body": "发送者已取消礼物 <a href=\"{link}\"><b>{gift}</b></a> 的报价。",
+        "expired_body": "礼物 <a href=\"{link}\"><b>{gift}</b></a> 的报价已失效。",
+        "final_note": "礼物转移和付款由双方另行完成。机器人中的状态不代表礼物或 Stars 已转移。",
+        "reject_button": "拒绝",
+        "accept_button": "接受",
+        "cancel_button": "取消报价",
+        "how_button": "如何转移？",
+        "open_gift": "查看礼物",
+        "how_text": "❓ <b>如何转移收藏礼物</b>\n\n1. 打开 Telegram 个人资料 → 礼物。\n2. 选择收藏礼物。\n3. 如果可以，点击转移。\n4. 核对收件人并确认。\n\n⚠️ 转移前请自行核实交易和付款。",
+        "creator_cannot": "发送者不能接受或拒绝自己的报价。",
+        "wrong_recipient": "此报价是发给其他用户的。",
+        "only_creator": "只有发送者可以取消此报价。",
+        "not_found": "未找到报价。",
+        "already_done": "此报价已处理。",
+        "expired_alert": "此报价已过期。",
+        "access_denied": "您无权执行此操作。",
+    },
+    "ar": {
+        "offer_title": "عرض شراء هدية",
+        "price_for": "مقابل",
+        "seller": "المرسل",
+        "expires": "الوقت المتبقي",
+        "external_note": "هذا عرض من خدمة خارجية. لا يحجز البوت نجوم Telegram ولا ينقل الهدايا.",
+        "accepted": "✅ <b>تم قبول العرض</b>",
+        "rejected": "❌ <b>تم رفض العرض</b>",
+        "cancelled": "↩️ <b>تم إلغاء العرض</b>",
+        "expired": "⌛ <b>انتهت صلاحية العرض</b>",
+        "accepted_body": "قبل المستخدم <b>{actor}</b> عرض شراء <a href=\"{link}\"><b>{gift}</b></a> مقابل <b>{price} ⭐</b>.",
+        "rejected_body": "رفض المستخدم <b>{actor}</b> العرض الخاص بالهدية <a href=\"{link}\"><b>{gift}</b></a>.",
+        "cancelled_body": "ألغى المنشئ العرض الخاص بالهدية <a href=\"{link}\"><b>{gift}</b></a>.",
+        "expired_body": "لم يعد العرض الخاص بالهدية <a href=\"{link}\"><b>{gift}</b></a> متاحاً.",
+        "final_note": "يتم تحويل الهدية والدفع بشكل منفصل بين الطرفين. حالة البوت لا تؤكد تحويل الهدية أو النجوم.",
+        "reject_button": "رفض",
+        "accept_button": "قبول",
+        "cancel_button": "إلغاء العرض",
+        "how_button": "كيفية التحويل؟",
+        "open_gift": "فتح الهدية",
+        "how_text": "❓ <b>كيفية تحويل هدية قابلة للجمع</b>\n\n1. افتح ملفك الشخصي في Telegram ثم الهدايا.\n2. اختر الهدية القابلة للجمع.\n3. اضغط على تحويل إذا كان متاحاً.\n4. تحقق من المستلم وأكد العملية.\n\n⚠️ تحقق بنفسك من الاتفاق والدفع قبل التحويل.",
+        "creator_cannot": "لا يمكن لمنشئ العرض قبول عرضه أو رفضه.",
+        "wrong_recipient": "هذا العرض موجّه إلى مستخدم آخر.",
+        "only_creator": "يمكن لمنشئ العرض فقط إلغاؤه.",
+        "not_found": "لم يتم العثور على العرض.",
+        "already_done": "تمت معالجة هذا العرض بالفعل.",
+        "expired_alert": "انتهت صلاحية هذا العرض.",
+        "access_denied": "ليس لديك إذن لتنفيذ هذا الإجراء.",
+    },
 }
 
 
@@ -86,7 +144,7 @@ def premium_emoji(emoji_id: str, fallback: str) -> str:
     return f'<tg-emoji emoji-id="{escape(emoji_id, quote=True)}">{escape(fallback)}</tg-emoji>'
 
 
-def remaining_time(expires_at: str | None) -> str:
+def remaining_time(expires_at: str | None, language: str = "ru") -> str:
     if not expires_at:
         return "—"
     try:
@@ -97,7 +155,14 @@ def remaining_time(expires_at: str | None) -> str:
     except (TypeError, ValueError):
         return "—"
     hours, remainder = divmod(seconds, 3600)
-    return f"{hours} ч. {remainder // 60} мин."
+    minutes = remainder // 60
+    if language == "en":
+        return f"{hours}h {minutes}m"
+    if language == "zh":
+        return f"{hours}小时{minutes}分钟"
+    if language == "ar":
+        return f"{hours} س {minutes} د"
+    return f"{hours} ч. {minutes} мин."
 
 
 def format_stars(value: Any) -> str:
@@ -115,7 +180,16 @@ def format_stars(value: Any) -> str:
 
 def make_offer_text(offer: dict[str, Any]) -> str:
     language = str(offer.get("language") or "ru")
-    creator = escape(str(offer["creator_name"]))
+    creator_name = escape(str(offer["creator_name"]))
+    try:
+        creator_id = int(offer.get("creator_id") or 0)
+    except (TypeError, ValueError):
+        creator_id = 0
+    creator = (
+        f'<a href="tg://user?id={creator_id}"><b>{creator_name}</b></a>'
+        if creator_id > 0
+        else f"<b>{creator_name}</b>"
+    )
     gift_name = escape(str(offer["gift_name"]))
     gift_link = escape(str(offer["gift_link"]), quote=True)
     price = format_stars(offer.get("price_stars") or offer.get("price") or 0)
@@ -125,8 +199,8 @@ def make_offer_text(offer: dict[str, Any]) -> str:
         f"{gift} <b>{tr(language, 'offer_title')}</b>\n\n"
         f"<b>{price} {star}</b> {tr(language, 'price_for')} "
         f'<a href="{gift_link}"><b>{gift_name}</b></a>\n'
-        f"{tr(language, 'seller')}: <b>{creator}</b>\n"
-        f"{tr(language, 'expires')}: <b>{remaining_time(offer.get('expires_at'))}</b>\n\n"
+        f"{tr(language, 'seller')}: {creator}\n"
+        f"{tr(language, 'expires')}: <b>{remaining_time(offer.get('expires_at'), language)}</b>\n\n"
         f"<i>{tr(language, 'external_note')}</i>"
     )
 
