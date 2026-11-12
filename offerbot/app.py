@@ -452,6 +452,7 @@ async def business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         or message.chat.type != "private"
         or not message.from_user
         or message.from_user.is_bot
+        or getattr(message, "sender_business_bot", None)
         or not message.business_connection_id
     ):
         return
