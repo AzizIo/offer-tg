@@ -897,6 +897,7 @@ async def post_init(application: Application) -> None:
         BotCommand("help", "Инструкция"),
         BotCommand("myoffers", "Мои предложения"),
         BotCommand("canceloffer", "Отменить свой оффер"),
+        BotCommand("businessoffer", "Оффер от бизнес-профиля"),
         BotCommand("stats", "Статистика (админ)"),
         BotCommand("grant", "Выдать подписку (админ)"),
         BotCommand("revoke", "Отозвать подписку (админ)"),
