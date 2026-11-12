@@ -21,6 +21,7 @@ from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    BusinessConnectionHandler,
     CommandHandler,
     ContextTypes,
     InlineQueryHandler,
@@ -152,6 +153,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Создайте предложение сообщением:\n"
         "<code>!продаёшь? https://t.me/nft/Gift-123 100 ru</code>\n\n"
         "Можно ответить этой командой на сообщение покупателя в группе — тогда оффер будет адресован именно ему.\n"
+        "Для отправки от имени бизнес-профиля используйте /businessoffer в личке бота.\n"
         "В остальных случаях это открытый оффер: принять его может любой пользователь, кроме автора.\n\n"
         "Бот не списывает и не резервирует Stars. Передача подарка и расчёт происходят отдельно.",
         parse_mode=ParseMode.HTML,
@@ -169,7 +171,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>Создание:</b>\n"
         "<code>!продаёшь? https://t.me/nft/Gift-123 100 ru</code>\n\n"
         "Цена — целое число Telegram Stars. Поддерживаются языки ru, en, zh, ar.\n\n"
-        "<b>Как отправить другому человеку:</b>\n"
+        "<b>Отправка от бизнес-профиля:</b> подключите бота в Telegram Business и используйте "
+        "<code>/businessoffer https://t.me/nft/Gift-123 100 ru</code>. Затем выберите получателя "
+        "из недавних личных чатов, доступных подключённому профилю.\n\n"
+        "<b>Inline-режим:</b> используйте его как запасной вариант, если Business-доставка недоступна.\n"
         "Пересылка готовой карточки Telegram не сохраняет inline-кнопки. Не пересылайте её.\n"
         "Включите inline-режим через @BotFather → /setinline. Затем откройте чат получателя, введите:\n"
         "<code>@имя_бота https://t.me/nft/Gift-123 100 ru</code>\n"
@@ -344,7 +349,7 @@ async def my_offers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def create_offer_from_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     message = update.effective_message
-    if not user or not message or not message.text:
+    if not user or not message or not message.text or update.business_message:
         return
 
     parsed = parse_offer_text(message.text)
@@ -403,7 +408,7 @@ async def create_offer_from_message(update: Update, context: ContextTypes.DEFAUL
         )
     except BadRequest as exc:
         error_text = str(exc).lower()
-        if "custom emoji" not in error_text and "icon_custom_emoji_id" not in error_text:
+        if not any(token in error_text for token in ("custom emoji", "icon_custom_emoji_id", "button_type_invalid")):
             raise
         logger.warning("Telegram rejected custom button emoji; retrying with standard buttons")
         sent = await message.reply_text(
@@ -418,6 +423,185 @@ async def create_offer_from_message(update: Update, context: ContextTypes.DEFAUL
         sent.message_id,
         business_connection_id=getattr(sent, "business_connection_id", None),
     )
+
+
+async def business_connection_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    connection = update.business_connection
+    if not connection:
+        return
+    rights = getattr(connection, "rights", None)
+    can_reply = bool(getattr(rights, "can_reply", False))
+    get_storage(context).upsert_business_connection(
+        connection_id=connection.id,
+        owner_id=connection.user.id,
+        is_enabled=bool(connection.is_enabled),
+        can_reply=can_reply,
+    )
+    logger.info(
+        "Business connection updated owner_id=%s enabled=%s can_reply=%s",
+        connection.user.id,
+        connection.is_enabled,
+        can_reply,
+    )
+
+
+async def business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.business_message
+    if (
+        not message
+        or message.chat.type != "private"
+        or not message.from_user
+        or message.from_user.is_bot
+        or getattr(message, "sender_business_bot", None)
+        or not message.business_connection_id
+    ):
+        return
+    get_storage(context).record_business_contact(
+        connection_id=message.business_connection_id,
+        chat_id=message.chat_id,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        display_name=message.from_user.full_name or message.from_user.username or str(message.from_user.id),
+    )
+
+
+async def business_offer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message or message.chat.type != "private" or update.business_message:
+        return
+    if not await user_can_create(user.id, context):
+        await message.reply_text("Для создания офферов нужна активная подписка.")
+        return
+    raw = " ".join(context.args or [])
+    parsed = parse_offer_text(raw)
+    if not parsed:
+        await message.reply_text(
+            "Формат команды:\n"
+            "<code>/businessoffer https://t.me/nft/Gift-123 100 ru</code>\n\n"
+            "Я покажу недавние личные чаты, в которых ваш бизнес-профиль может отвечать.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    contacts = get_storage(context).list_business_contacts(user.id, limit=20)
+    if not contacts:
+        await message.reply_text(
+            "Пока нет доступных получателей. Подключите меня в Telegram Business, "
+            "разрешите право «Отвечать на сообщения», затем дождитесь входящего сообщения "
+            "в личный чат с вашим профилем. Telegram ограничивает отправку бизнес-сообщений "
+            "доступными чатами и недавней активностью (обычно последние 24 часа)."
+        )
+        return
+    context.user_data["business_offer_draft"] = {
+        "gift_name": parsed.gift_name,
+        "gift_link": parsed.gift_link,
+        "price_stars": parsed.price_stars,
+        "language": parsed.language,
+    }
+    buttons = []
+    for contact in contacts:
+        label = contact["display_name"]
+        if contact.get("username"):
+            label += f" (@{contact['username']})"
+        buttons.append([InlineKeyboardButton(
+            label[:64],
+            callback_data=f"business:send:{contact['id']}",
+        )])
+    await message.reply_text(
+        "Выберите получателя. Оффер будет отправлен от имени вашего подключённого профиля:",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def send_business_offer_from_callback(query, context: ContextTypes.DEFAULT_TYPE, contact_id: int) -> None:
+    user = query.from_user
+    draft = context.user_data.pop("business_offer_draft", None)
+    if not draft:
+        await query.answer("Черновик устарел. Создайте оффер заново командой /businessoffer.", show_alert=True)
+        return
+    if not await user_can_create(user.id, context):
+        await query.answer("Нет доступа к созданию офферов.", show_alert=True)
+        return
+    storage = get_storage(context)
+    contact = storage.get_business_contact(contact_id, owner_id=user.id)
+    if not contact:
+        await query.answer("Этот чат больше недоступен. Обновите список через /businessoffer.", show_alert=True)
+        return
+    access = storage.get_access(user.id)
+    plan = str(access.get("sub_type") if access else "vip")
+    try:
+        offer_id = storage.create_offer(
+            creator_id=user.id,
+            creator_name=user.full_name or user.username or "Пользователь",
+            creator_username=user.username or "",
+            gift_name=draft["gift_name"],
+            gift_link=draft["gift_link"],
+            price_stars=draft["price_stars"],
+            ttl_hours=get_settings(context).default_offer_ttl_hours,
+            language=draft["language"],
+            recipient_id=int(contact["user_id"]),
+            daily_limit=get_settings(context).daily_limit(plan),
+        )
+    except OfferLimitReached:
+        await query.answer("Достигнут дневной лимит офферов.", show_alert=True)
+        return
+
+    offer = storage.get_offer(offer_id)
+    if not offer:
+        await query.answer("Не удалось создать оффер.", show_alert=True)
+        return
+    send_args = {
+        "chat_id": int(contact["chat_id"]),
+        "business_connection_id": contact["connection_id"],
+        "text": make_offer_text(offer),
+        "reply_markup": offer_keyboard(offer_id, draft["language"]),
+        "parse_mode": ParseMode.HTML,
+        "link_preview_options": LinkPreviewOptions(is_disabled=False, show_above_text=True),
+    }
+    try:
+        sent = await context.bot.send_message(**send_args)
+    except BadRequest as exc:
+        error_text = str(exc).lower()
+        if not any(token in error_text for token in ("custom emoji", "icon_custom_emoji_id", "button_type_invalid")):
+            try:
+                storage.resolve_offer(offer_id, actor_id=user.id, action="cancelled")
+            except Exception:
+                logger.exception("Could not roll back unsent business offer id=%s", offer_id)
+            logger.warning("Business offer send failed for offer_id=%s: %s", offer_id, exc)
+            await query.answer("Telegram не разрешил отправку в этот чат. Проверьте Business-доступ и попробуйте снова.", show_alert=True)
+            return
+        send_args["reply_markup"] = offer_keyboard(offer_id, draft["language"], custom_icons=False)
+        try:
+            sent = await context.bot.send_message(**send_args)
+        except TelegramError as retry_exc:
+            try:
+                storage.resolve_offer(offer_id, actor_id=user.id, action="cancelled")
+            except Exception:
+                logger.exception("Could not roll back unsent business offer id=%s", offer_id)
+            logger.warning("Business offer send retry failed for offer_id=%s: %s", offer_id, retry_exc)
+            await query.answer("Не удалось отправить оффер через Business. Проверьте разрешения и повторите попытку.", show_alert=True)
+            return
+    except TelegramError as exc:
+        try:
+            storage.resolve_offer(offer_id, actor_id=user.id, action="cancelled")
+        except Exception:
+            logger.exception("Could not roll back unsent business offer id=%s", offer_id)
+        logger.warning("Business offer send failed for offer_id=%s: %s", offer_id, exc)
+        await query.answer("Telegram не разрешил отправку в этот чат. Проверьте Business-доступ и попробуйте снова.", show_alert=True)
+        return
+
+    storage.set_offer_message(
+        offer_id,
+        sent.chat_id,
+        sent.message_id,
+        business_connection_id=contact["connection_id"],
+    )
+    await query.answer("Оффер отправлен от имени вашего профиля.")
+    if query.message:
+        await query.message.reply_text(
+            f"Отправлено: <b>{contact['display_name']}</b>. ID оффера: <code>{offer_id}</code>.",
+            parse_mode=ParseMode.HTML,
+        )
 
 
 async def notify_creator(context: ContextTypes.DEFAULT_TYPE, offer: dict, text: str) -> None:
@@ -513,6 +697,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.answer("Подписка подтверждена. Нажмите /start.", show_alert=True)
         else:
             await query.answer("Подписка пока не найдена.", show_alert=True)
+        return
+
+    if data.startswith("business:send:"):
+        try:
+            contact_id = int(data.rsplit(":", 1)[1])
+        except ValueError:
+            await query.answer("Некорректный получатель.", show_alert=True)
+            return
+        await send_business_offer_from_callback(query, context, contact_id)
         return
 
     if data.startswith("offer:"):
@@ -657,7 +850,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.answer([result], cache_time=1)
     except BadRequest as exc:
         error_text = str(exc).lower()
-        if "custom emoji" not in error_text and "icon_custom_emoji_id" not in error_text:
+        if not any(token in error_text for token in ("custom emoji", "icon_custom_emoji_id", "button_type_invalid")):
             raise
         logger.warning("Telegram rejected custom button emoji in inline mode; retrying with standard buttons")
         fallback_result = InlineQueryResultArticle(
@@ -709,6 +902,7 @@ async def post_init(application: Application) -> None:
         BotCommand("help", "Инструкция"),
         BotCommand("myoffers", "Мои предложения"),
         BotCommand("canceloffer", "Отменить свой оффер"),
+        BotCommand("businessoffer", "Оффер от бизнес-профиля"),
         BotCommand("stats", "Статистика (админ)"),
         BotCommand("grant", "Выдать подписку (админ)"),
         BotCommand("revoke", "Отозвать подписку (админ)"),
@@ -742,6 +936,9 @@ def main() -> None:
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("myoffers", my_offers))
     application.add_handler(CommandHandler("canceloffer", cancel_offer_command))
+    application.add_handler(CommandHandler("businessoffer", business_offer_command))
+    application.add_handler(BusinessConnectionHandler(business_connection_update))
+    application.add_handler(MessageHandler(filters.UpdateType.BUSINESS_MESSAGE, business_message), group=-1)
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(InlineQueryHandler(inline_query))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, create_offer_from_message))
