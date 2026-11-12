@@ -403,11 +403,11 @@ class Storage:
         with self.read_connection() as db:
             rows = db.execute("""
                 SELECT id, creator_id, creator_name, gift_name, gift_link, price,
-                       status, created_at, expires_at, recipient_id
+                       status, created_at, expires_at, recipient_id, resolved_by
                 FROM offers
-                WHERE creator_id = ? OR recipient_id = ?
+                WHERE creator_id = ? OR recipient_id = ? OR resolved_by = ?
                 ORDER BY id DESC LIMIT ?
-            """, (user_id, user_id, limit)).fetchall()
+            """, (user_id, user_id, user_id, limit)).fetchall()
         return [dict(row) for row in rows]
 
     def stats(self) -> dict[str, int]:
