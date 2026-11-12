@@ -198,16 +198,16 @@ def make_offer_text(offer: dict[str, Any]) -> str:
     time_left = remaining_time(offer.get("expires_at"), language)
 
     return (
-        f"<b>{tr(language, 'brand_label')}</b>\\n"
+        f"<b>{tr(language, 'brand_label')}</b>\n"
         + tr(language, "offer_sentence").format(
             creator=creator,
             price=price,
             link=gift_link,
             gift=gift_name,
         )
-        + "\\n"
+        + "\n"
         + tr(language, "expiry_line").format(time=time_left)
-        + "\\n\\n"
+        + "\n\n"
         + tr(language, "disclaimer")
     )
 
