@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from uuid import uuid4
+
+from dotenv import load_dotenv
 
 from telegram import (
     InlineKeyboardButton,
@@ -26,7 +29,7 @@ from telegram.ext import (
 )
 
 from .config import ConfigurationError, Settings
-from .keyboards import offer_keyboard, resolved_keyboard, start_keyboard
+from .keyboards import offer_keyboard, start_keyboard
 from .parser import parse_offer_text
 from .presentation import make_offer_text, make_resolved_text, tr
 from .storage import (
@@ -44,6 +47,17 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("offerbot")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_environment(env_file: Path | None = None) -> bool:
+    """Load the project .env regardless of the shell's current directory.
+
+    Existing process environment variables take precedence, which is useful
+    for Docker, systemd, and managed deployment environments.
+    """
+    dotenv_path = env_file or PROJECT_ROOT / ".env"
+    return load_dotenv(dotenv_path=dotenv_path, override=False)
 
 
 def get_settings(context: ContextTypes.DEFAULT_TYPE) -> Settings:
@@ -269,7 +283,6 @@ async def cancel_offer_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 business_connection_id=offer.get("source_business_connection_id"),
                 text=result_text,
                 parse_mode=ParseMode.HTML,
-                reply_markup=resolved_keyboard(offer, str(offer.get("language") or "ru")),
                 link_preview_options=LinkPreviewOptions(is_disabled=False),
             )
         except TelegramError:
@@ -545,11 +558,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "rejected": "Предложение отклонено.",
             "cancelled": "Оффер отменён.",
         }[db_action])
-        await edit_offer_message(
-            query,
-            text,
-            reply_markup=resolved_keyboard(offer, str(offer.get("language") or "ru")),
-        )
+        await edit_offer_message(query, text)
         if user.id != int(offer["creator_id"]):
             await notify_creator(context, offer, text)
         return
@@ -675,12 +684,8 @@ async def post_init(application: Application) -> None:
 
 def main() -> None:
     try:
-        # Optional .env support; production may inject variables via systemd/Docker.
-        try:
-            from dotenv import load_dotenv
-            load_dotenv()
-        except ImportError:
-            pass
+        # Load the repository-root .env before reading BOT_TOKEN and all other settings.
+        load_environment()
         settings = Settings.from_env()
     except ConfigurationError as exc:
         raise SystemExit(f"Configuration error: {exc}") from exc
