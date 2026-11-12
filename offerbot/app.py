@@ -561,7 +561,7 @@ async def send_business_offer_from_callback(query, context: ContextTypes.DEFAULT
         sent = await context.bot.send_message(**send_args)
     except BadRequest as exc:
         error_text = str(exc).lower()
-        if "custom emoji" not in error_text and "icon_custom_emoji_id" not in error_text:
+        if not any(token in error_text for token in ("custom emoji", "icon_custom_emoji_id", "button_type_invalid")):
             try:
                 storage.resolve_offer(offer_id, actor_id=user.id, action="cancelled")
             except Exception:
@@ -849,7 +849,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.answer([result], cache_time=1)
     except BadRequest as exc:
         error_text = str(exc).lower()
-        if "custom emoji" not in error_text and "icon_custom_emoji_id" not in error_text:
+        if not any(token in error_text for token in ("custom emoji", "icon_custom_emoji_id", "button_type_invalid")):
             raise
         logger.warning("Telegram rejected custom button emoji in inline mode; retrying with standard buttons")
         fallback_result = InlineQueryResultArticle(
