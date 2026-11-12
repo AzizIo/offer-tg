@@ -153,6 +153,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Создайте предложение сообщением:\n"
         "<code>!продаёшь? https://t.me/nft/Gift-123 100 ru</code>\n\n"
         "Можно ответить этой командой на сообщение покупателя в группе — тогда оффер будет адресован именно ему.\n"
+        "Для отправки от имени бизнес-профиля используйте /businessoffer в личке бота.\n"
         "В остальных случаях это открытый оффер: принять его может любой пользователь, кроме автора.\n\n"
         "Бот не списывает и не резервирует Stars. Передача подарка и расчёт происходят отдельно.",
         parse_mode=ParseMode.HTML,
@@ -170,7 +171,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>Создание:</b>\n"
         "<code>!продаёшь? https://t.me/nft/Gift-123 100 ru</code>\n\n"
         "Цена — целое число Telegram Stars. Поддерживаются языки ru, en, zh, ar.\n\n"
-        "<b>Как отправить другому человеку:</b>\n"
+        "<b>Отправка от бизнес-профиля:</b> подключите бота в Telegram Business и используйте "
+        "<code>/businessoffer https://t.me/nft/Gift-123 100 ru</code>. Затем выберите получателя "
+        "из недавних личных чатов, доступных подключённому профилю.\n\n"
+        "<b>Inline-режим:</b> используйте его как запасной вариант, если Business-доставка недоступна.\n"
         "Пересылка готовой карточки Telegram не сохраняет inline-кнопки. Не пересылайте её.\n"
         "Включите inline-режим через @BotFather → /setinline. Затем откройте чат получателя, введите:\n"
         "<code>@имя_бота https://t.me/nft/Gift-123 100 ru</code>\n"
@@ -404,7 +408,7 @@ async def create_offer_from_message(update: Update, context: ContextTypes.DEFAUL
         )
     except BadRequest as exc:
         error_text = str(exc).lower()
-        if "custom emoji" not in error_text and "icon_custom_emoji_id" not in error_text:
+        if not any(token in error_text for token in ("custom emoji", "icon_custom_emoji_id", "button_type_invalid")):
             raise
         logger.warning("Telegram rejected custom button emoji; retrying with standard buttons")
         sent = await message.reply_text(
