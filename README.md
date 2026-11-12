@@ -88,13 +88,14 @@ The container runs as a non-root user (UID 10001). Never run two bot processes a
 
 The price must be a positive whole number of Stars. Supported language codes are ru, en, zh, and ar. The message catalog includes Russian, English, Chinese, and Arabic.
 
-In a group, reply to a person's message with the offer command to address the offer to that person. Otherwise the offer is open to everyone except its creator.
+In a group, reply to a person's message with the offer command to address the offer to that person. Otherwise the offer is open to everyone except its creator. To let the bot see custom text messages in groups, disable BotFather Privacy Mode for the bot or grant it the required group permissions.
 
 ## Commands
 
 - /start — open the menu
 - /help — usage and safety notes
-- /myoffers — recent offers created by or addressed to you
+- /myoffers — recent offers created by you, addressed to you, or resolved by you
+- /canceloffer OFFER_ID — cancel your own pending offer
 - /grant USER_ID DAYS [normal|vip] — admin-only subscription grant; zero days means unlimited
 - /revoke USER_ID — admin-only subscription revocation
 - /stats — admin-only summary
