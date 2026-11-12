@@ -435,8 +435,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
 
+        action_map = {
+            "accept": "accepted",
+            "reject": "rejected",
+            "cancel": "cancelled",
+        }
+        db_action = action_map.get(action)
+        if db_action is None:
+            await query.answer("Неизвестное действие.", show_alert=True)
+            return
+
         try:
-            offer = storage.resolve_offer(offer_id, actor_id=user.id, action=action)
+            offer = storage.resolve_offer(offer_id, actor_id=user.id, action=db_action)
         except OfferNotFound:
             await query.answer("Оффер не найден.", show_alert=True)
             return
@@ -454,12 +464,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
         actor_name = user.full_name or user.username or str(user.id)
-        text = make_resolved_text(offer, action, actor_name)
+        text = make_resolved_text(offer, db_action, actor_name)
         await query.answer({
             "accepted": "Предложение принято.",
             "rejected": "Предложение отклонено.",
             "cancelled": "Оффер отменён.",
-        }[action])
+        }[db_action])
         await edit_offer_message(
             query,
             text,
