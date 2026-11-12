@@ -54,9 +54,17 @@ For a new installation:
 
     cp .env.example .env
     # edit .env: set BOT_TOKEN and OWNER_ID
+    mkdir -p data
+    sudo chown -R 10001:10001 data
     docker compose up -d --build
 
-SQLite is persisted in ./data/offers.db. To migrate an existing deployment, stop the old bot and copy its actual offers.db file into ./data/offers.db before starting the container. Never run two bot processes against the same database and token at the same time.
+SQLite is persisted in ./data/offers.db. For an existing deployment, stop the old bot first, copy its actual database and set permissions before the first V2 start:
+
+    cp /path/to/current/offers.db data/offers.db
+    sudo chown 10001:10001 data/offers.db
+    docker compose up -d --build
+
+The container runs as a non-root user (UID 10001). Never run two bot processes against the same database and token at the same time.
 
 ## Environment variables
 
