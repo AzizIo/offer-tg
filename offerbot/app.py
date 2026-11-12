@@ -331,7 +331,12 @@ async def create_offer_from_message(update: Update, context: ContextTypes.DEFAUL
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=False, show_above_text=True),
     )
-    get_storage(context).set_offer_message(offer_id, sent.chat_id, sent.message_id)
+    get_storage(context).set_offer_message(
+        offer_id,
+        sent.chat_id,
+        sent.message_id,
+        business_connection_id=getattr(sent, "business_connection_id", None),
+    )
 
 
 async def notify_creator(context: ContextTypes.DEFAULT_TYPE, offer: dict, text: str) -> None:
@@ -357,12 +362,24 @@ async def edit_offer_message(query, text: str, reply_markup=None) -> None:
             link_preview_options=LinkPreviewOptions(is_disabled=False),
         )
     elif query.message:
-        await query.edit_message_text(
-            text=text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=reply_markup,
-            link_preview_options=LinkPreviewOptions(is_disabled=False),
-        )
+        business_connection_id = getattr(query.message, "business_connection_id", None)
+        if business_connection_id:
+            await query.get_bot().edit_message_text(
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id,
+                business_connection_id=business_connection_id,
+                text=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup,
+                link_preview_options=LinkPreviewOptions(is_disabled=False),
+            )
+        else:
+            await query.edit_message_text(
+                text=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup,
+                link_preview_options=LinkPreviewOptions(is_disabled=False),
+            )
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -564,11 +581,13 @@ async def expire_offers_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             continue
         chat_id = offer.get("source_chat_id")
         message_id = offer.get("source_message_id")
+        business_connection_id = offer.get("source_business_connection_id")
         if chat_id and message_id:
             try:
                 await context.bot.edit_message_text(
                     chat_id=int(chat_id),
                     message_id=int(message_id),
+                    business_connection_id=business_connection_id,
                     text=make_resolved_text(offer, "expired", ""),
                     parse_mode=ParseMode.HTML,
                     reply_markup=None,
