@@ -39,7 +39,8 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
        python -m pip install -e ".[dev]"
 
 3. Copy .env.example to .env and configure at least BOT_TOKEN and OWNER_ID.
-4. Start the application:
+4. Keep DB_PATH=offers.db if the existing deployment uses the legacy offers.db file.
+5. Start the application:
 
        python "bot3 (1).py"
 
@@ -54,7 +55,7 @@ The legacy filename remains as a compatibility launcher. The new implementation 
 | OWNER_USERNAME | No | Public support username used in menu links |
 | ADMIN_IDS | No | Comma-separated trusted admin IDs |
 | SUB_CHANNEL | No | Public channel username; empty disables membership gate |
-| DB_PATH | No | SQLite path, defaults to ./data/offers.sqlite3 |
+| DB_PATH | No | SQLite path; defaults to the legacy-compatible offers.db |
 | DEFAULT_OFFER_TTL_HOURS | No | 1, 3, 6, 12, 24, 48, or 72 |
 | NORMAL_DAILY_OFFERS | No | Normal daily creation quota |
 | VIP_DAILY_OFFERS | No | VIP daily creation quota |
@@ -84,7 +85,7 @@ Only OWNER_ID and ADMIN_IDS may manage subscriptions. The old secret command has
 
 The first V2 startup adds missing columns and creates an audit table. It does not drop or recreate the original allowed_users or offers tables. Back up the SQLite database before the first V2 deployment anyway.
 
-The original database file was named offers.db; set DB_PATH to that exact path if the existing data should be retained. Do not start V2 against a fresh database if the goal is to preserve old subscriptions and offers.
+The original bot used offers.db. V2 defaults to that same path, so the first startup in the same working directory can migrate existing users and offers. If the database lives elsewhere, set DB_PATH to its exact existing path before starting V2.
 
 ## Tests
 
