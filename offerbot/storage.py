@@ -141,6 +141,7 @@ class Storage:
                     "language": "TEXT NOT NULL DEFAULT 'ru'",
                     "source_chat_id": "INTEGER",
                     "source_message_id": "INTEGER",
+                    "source_business_connection_id": "TEXT",
                 },
             }
             for table, columns in migrations.items():
@@ -282,11 +283,21 @@ class Storage:
             """, (creator_id, offer_id, f"price_stars={price_stars};recipient_id={recipient_id or ''}", now.isoformat()))
             return offer_id
 
-    def set_offer_message(self, offer_id: int, chat_id: int, message_id: int) -> None:
+    def set_offer_message(
+        self,
+        offer_id: int,
+        chat_id: int,
+        message_id: int,
+        business_connection_id: str | None = None,
+    ) -> None:
         with self.transaction(immediate=True) as db:
             db.execute(
-                "UPDATE offers SET source_chat_id = ?, source_message_id = ? WHERE id = ?",
-                (chat_id, message_id, offer_id),
+                """
+                UPDATE offers
+                SET source_chat_id = ?, source_message_id = ?, source_business_connection_id = ?
+                WHERE id = ?
+                """,
+                (chat_id, message_id, business_connection_id, offer_id),
             )
 
     def get_offer(self, offer_id: int) -> dict | None:
@@ -294,7 +305,7 @@ class Storage:
             row = db.execute("""
                 SELECT id, creator_id, creator_name, creator_username, gift_name, gift_link,
                        price, status, expires_at, recipient_id, resolved_by, resolved_at,
-                       language, source_chat_id, source_message_id
+                       language, source_chat_id, source_message_id, source_business_connection_id
                 FROM offers WHERE id = ?
             """, (offer_id,)).fetchone()
         if not row:
