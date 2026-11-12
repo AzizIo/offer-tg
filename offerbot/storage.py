@@ -469,10 +469,15 @@ class Storage:
     ) -> None:
         with self.transaction(immediate=True) as db:
             connection = db.execute(
-                "SELECT is_enabled, can_reply FROM business_connections WHERE connection_id = ?",
+                "SELECT owner_id, is_enabled, can_reply FROM business_connections WHERE connection_id = ?",
                 (connection_id,),
             ).fetchone()
-            if not connection or not connection["is_enabled"] or not connection["can_reply"]:
+            if (
+                not connection
+                or int(connection["owner_id"]) == user_id
+                or not connection["is_enabled"]
+                or not connection["can_reply"]
+            ):
                 return
             db.execute("""
                 INSERT INTO business_contacts(
