@@ -12,7 +12,7 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
 
 ## Features
 
-- Compact Offer TG-branded offer message with a gift-link preview and plain Accept / Decline actions.
+- Compact Offer TG-branded offer message with a gift-link preview and custom-emoji Accept / Decline buttons (with a plain-button fallback if Telegram rejects custom icons).
 - Public offers, or offers addressed to a specific user by replying to that person's message in a group.
 - Creator-only cancellation; the creator cannot accept or decline their own offer.
 - Atomic status transitions, expiry checks, and audit events.
@@ -93,6 +93,21 @@ The container runs as a non-root user (UID 10001). Never run two bot processes a
 The price must be a positive whole number of Stars. Supported language codes are ru, en, zh, and ar. The message catalog includes Russian, English, Chinese, and Arabic.
 
 In a group, reply to a person's message with the offer command to address the offer to that person. Otherwise the offer is open to everyone except its creator. To let the bot see custom text messages in groups, disable BotFather Privacy Mode for the bot or grant it the required group permissions.
+
+### Send an offer to someone else
+
+Do not forward an existing offer card: Telegram removes its inline keyboard during forwarding.
+
+To place a fresh offer with working buttons in another person's chat:
+
+1. Enable inline mode for the bot in @BotFather with `/setinline`.
+2. Open the recipient's private chat (or the target group).
+3. Type `@BOT_USERNAME https://t.me/nft/Gift-123 100 ru`.
+4. Select the Offer TG result from the inline picker. Telegram inserts a new bot offer message with active buttons.
+
+In a group, the more restrictive option is to reply directly to the recipient's message with the normal offer command. That binds the offer to that Telegram user, so other members cannot accept it.
+
+Custom button icons require Telegram to allow `icon_custom_emoji_id` for the bot (for example, the bot owner's Telegram Premium eligibility). If the API rejects the icons, the bot automatically retries with standard buttons.
 
 ## Commands
 

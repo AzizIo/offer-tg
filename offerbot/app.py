@@ -17,7 +17,7 @@ from telegram import (
     BotCommand,
 )
 from telegram.constants import ChatMemberStatus, ParseMode
-from telegram.error import TelegramError, Forbidden
+from telegram.error import TelegramError, Forbidden, BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -168,8 +168,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "📘 <b>Как пользоваться Offer TG</b>\n\n"
         "<b>Создание:</b>\n"
         "<code>!продаёшь? https://t.me/nft/Gift-123 100 ru</code>\n\n"
-        "Цена — целое число Telegram Stars. Поддерживаются языки ru, en, zh, ar.\n"
-        "Чтобы адресовать оффер конкретному человеку в группе, ответьте командой на его сообщение.\n\n"
+        "Цена — целое число Telegram Stars. Поддерживаются языки ru, en, zh, ar.\n\n"
+        "<b>Как отправить другому человеку:</b>\n"
+        "Пересылка готовой карточки Telegram не сохраняет inline-кнопки. Не пересылайте её.\n"
+        "Включите inline-режим через @BotFather → /setinline. Затем откройте чат получателя, введите:\n"
+        "<code>@имя_бота https://t.me/nft/Gift-123 100 ru</code>\n"
+        "Выберите результат Offer TG — бот вставит новое сообщение с рабочими кнопками.\n"
+        "В группе можно просто ответить командой на сообщение нужного человека: тогда принять оффер сможет только он.\n\n"
         "<b>Управление:</b>\n"
         "Автор может отменить свой оффер командой /canceloffer ID (ID доступен в /myoffers). "
         "Другой пользователь может принять или отклонить оффер. Автор не может принять собственный оффер.\n\n"
@@ -389,12 +394,24 @@ async def create_offer_from_message(update: Update, context: ContextTypes.DEFAUL
     if not offer:
         await message.reply_text("Не удалось создать оффер. Попробуйте ещё раз.")
         return
-    sent = await message.reply_text(
-        make_offer_text(offer),
-        reply_markup=offer_keyboard(offer_id, parsed.language),
-        parse_mode=ParseMode.HTML,
-        link_preview_options=LinkPreviewOptions(is_disabled=False, show_above_text=True),
-    )
+    try:
+        sent = await message.reply_text(
+            make_offer_text(offer),
+            reply_markup=offer_keyboard(offer_id, parsed.language),
+            parse_mode=ParseMode.HTML,
+            link_preview_options=LinkPreviewOptions(is_disabled=False, show_above_text=True),
+        )
+    except BadRequest as exc:
+        error_text = str(exc).lower()
+        if "custom emoji" not in error_text and "icon_custom_emoji_id" not in error_text:
+            raise
+        logger.warning("Telegram rejected custom button emoji; retrying with standard buttons")
+        sent = await message.reply_text(
+            make_offer_text(offer),
+            reply_markup=offer_keyboard(offer_id, parsed.language, custom_icons=False),
+            parse_mode=ParseMode.HTML,
+            link_preview_options=LinkPreviewOptions(is_disabled=False, show_above_text=True),
+        )
     get_storage(context).set_offer_message(
         offer_id,
         sent.chat_id,
@@ -624,9 +641,27 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not offer:
         await query.answer([], cache_time=1)
         return
-    await query.answer([
-        InlineQueryResultArticle(
-            id=str(uuid4()),
+    result_id = str(uuid4())
+    result = InlineQueryResultArticle(
+        id=result_id,
+        title=f"{parsed.gift_name} — {parsed.price_stars} Stars",
+        description=f"Предложение от {user.full_name}",
+        input_message_content=InputTextMessageContent(
+            make_offer_text(offer),
+            parse_mode=ParseMode.HTML,
+            link_preview_options=LinkPreviewOptions(is_disabled=False, show_above_text=True),
+        ),
+        reply_markup=offer_keyboard(offer_id, parsed.language),
+    )
+    try:
+        await query.answer([result], cache_time=1)
+    except BadRequest as exc:
+        error_text = str(exc).lower()
+        if "custom emoji" not in error_text and "icon_custom_emoji_id" not in error_text:
+            raise
+        logger.warning("Telegram rejected custom button emoji in inline mode; retrying with standard buttons")
+        fallback_result = InlineQueryResultArticle(
+            id=result_id,
             title=f"{parsed.gift_name} — {parsed.price_stars} Stars",
             description=f"Предложение от {user.full_name}",
             input_message_content=InputTextMessageContent(
@@ -634,9 +669,9 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 parse_mode=ParseMode.HTML,
                 link_preview_options=LinkPreviewOptions(is_disabled=False, show_above_text=True),
             ),
-            reply_markup=offer_keyboard(offer_id, parsed.language),
+            reply_markup=offer_keyboard(offer_id, parsed.language, custom_icons=False),
         )
-    ], cache_time=1)
+        await query.answer([fallback_result], cache_time=1)
 
 
 async def expire_offers_job(context: ContextTypes.DEFAULT_TYPE) -> None:
