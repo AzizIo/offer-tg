@@ -31,3 +31,30 @@ def test_accepted_text_does_not_claim_payment_or_transfer_completed():
 
     assert "Предложение принято" in text
     assert "не подтверждает перевод подарка или Stars" in text
+
+
+
+def test_stars_formatting_handles_large_numbers_and_legacy_decimals():
+    from offerbot.presentation import format_stars
+
+    assert format_stars("12000") == "12,000"
+    assert format_stars("1.50") == "1.5"
+    assert format_stars("12000.25") == "12,000.25"
+
+
+def test_offer_card_uses_localized_chinese_and_arabic_labels():
+    from offerbot.presentation import make_offer_text
+
+    base = {
+        "creator_id": 10,
+        "creator_name": "Seller",
+        "gift_name": "Gift",
+        "gift_link": "https://t.me/nft/Gift-1",
+        "price_stars": 100,
+        "expires_at": None,
+    }
+    zh = make_offer_text({**base, "language": "zh"})
+    ar = make_offer_text({**base, "language": "ar"})
+
+    assert "礼物购买报价" in zh
+    assert "عرض شراء هدية" in ar
