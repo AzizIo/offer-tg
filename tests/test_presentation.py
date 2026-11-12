@@ -14,7 +14,7 @@ def test_offer_text_escapes_user_content_and_discloses_manual_settlement():
     assert "<script>" not in text
     assert "&lt;script&gt;" in text
     assert "&lt;b&gt;Gift&lt;/b&gt;" in text
-    assert "не резервирует Stars" in text
+    assert "Stars не резервируются" in text
 
 
 def test_accepted_text_does_not_claim_payment_or_transfer_completed():
@@ -56,5 +56,26 @@ def test_offer_card_uses_localized_chinese_and_arabic_labels():
     zh = make_offer_text({**base, "language": "zh"})
     ar = make_offer_text({**base, "language": "ar"})
 
-    assert "礼物购买报价" in zh
-    assert "عرض شراء هدية" in ar
+    assert "Offer TG" in zh
+    assert "Offer TG" in ar
+
+
+
+def test_offer_card_matches_minimal_offer_wording_and_is_clearly_unofficial():
+    text = make_offer_text({
+        "creator_id": 42,
+        "creator_name": "Seller",
+        "gift_name": "Gift #123",
+        "gift_link": "https://t.me/nft/Gift-123",
+        "price_stars": 18000,
+        "expires_at": None,
+        "language": "en",
+    })
+
+    assert "Offer TG" in text
+    assert "offered you <b>18,000 ⭐</b>" in text
+    assert "your gift" in text
+    assert "Unofficial offer" in text
+    assert "Stars are not reserved" in text
+    assert "From" not in text
+    assert "Open gift" not in text
