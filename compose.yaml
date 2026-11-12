@@ -1,0 +1,15 @@
+services:
+  offerbot:
+    build: .
+    container_name: offer-tg
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_PATH: /app/data/offers.db
+    volumes:
+      - offer_data:/app/data
+    init: true
+
+volumes:
+  offer_data:
