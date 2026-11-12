@@ -13,13 +13,13 @@ def test_offer_keyboard_uses_the_requested_custom_emoji_ids():
     assert reject.callback_data == "offer:reject:123"
     assert reject.icon_custom_emoji_id == REJECT_BUTTON_EMOJI_ID
     assert reject.icon_custom_emoji_id == "5985346521103604145"
-    assert reject.style == "danger"
+    assert reject.style is None
 
     assert accept.text == "Принять"
     assert accept.callback_data == "offer:accept:123"
     assert accept.icon_custom_emoji_id == ACCEPT_BUTTON_EMOJI_ID
     assert accept.icon_custom_emoji_id == "5985596818912712352"
-    assert accept.style == "success"
+    assert accept.style is None
 
 
 def test_offer_keyboard_can_fall_back_without_custom_emoji():
