@@ -15,9 +15,9 @@ def offer_keyboard(
     *,
     custom_icons: bool = True,
 ) -> InlineKeyboardMarkup:
-    """Render localized actions with Telegram custom-emoji button icons."""
-    reject_kwargs = {"style": "danger"}
-    accept_kwargs = {"style": "success"}
+    """Render neutral Telegram-style actions with custom emoji icons when supported."""
+    reject_kwargs = {}
+    accept_kwargs = {}
     if custom_icons:
         reject_kwargs["icon_custom_emoji_id"] = REJECT_BUTTON_EMOJI_ID
         accept_kwargs["icon_custom_emoji_id"] = ACCEPT_BUTTON_EMOJI_ID
