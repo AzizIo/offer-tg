@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from offerbot.storage import Storage, iso_now, utc_now
+from offerbot.storage import Storage, utc_now
 
 
 def test_business_contacts_require_enabled_connection_and_reply_permission(tmp_path):
