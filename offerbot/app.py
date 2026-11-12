@@ -472,8 +472,8 @@ async def business_offer_command(update: Update, context: ContextTypes.DEFAULT_T
     parsed = parse_offer_text(raw)
     if not parsed:
         await message.reply_text(
-            "Формат команды:\\n"
-            "<code>/businessoffer https://t.me/nft/Gift-123 100 ru</code>\\n\\n"
+            "Формат команды:\n"
+            "<code>/businessoffer https://t.me/nft/Gift-123 100 ru</code>\n\n"
             "Я покажу недавние личные чаты, в которых ваш бизнес-профиль может отвечать.",
             parse_mode=ParseMode.HTML,
         )
