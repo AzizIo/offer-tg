@@ -196,7 +196,7 @@ class Storage:
                     granted_at = excluded.granted_at,
                     expires_at = excluded.expires_at,
                     sub_type = excluded.sub_type
-            """, (user_id, username or "", first_name or "", now.isoformat(), expires, plan))
+            """, (user_id, username, first_name, now.isoformat(), expires, plan))
             if actor_id is not None:
                 db.execute("""
                     INSERT INTO audit_log(actor_id, action, entity_type, entity_id, details, created_at)
