@@ -19,12 +19,6 @@ def offer_keyboard(offer_id: int, language: str = "ru") -> InlineKeyboardMarkup:
                 icon_custom_emoji_id=EMOJI["accept"],
             ),
         ],
-        [
-            InlineKeyboardButton(
-                tr(language, "cancel_button"),
-                callback_data=f"offer:cancel:{offer_id}",
-            )
-        ],
     ])
 
 
