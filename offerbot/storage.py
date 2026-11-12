@@ -8,7 +8,6 @@ from typing import Iterator
 
 
 VALID_PLANS = {"normal", "vip"}
-VALID_STATUSES = {"pending", "accepted", "rejected", "cancelled", "expired"}
 
 
 def utc_now() -> datetime:
@@ -75,6 +74,14 @@ class Storage:
         finally:
             connection.close()
 
+    @contextmanager
+    def read_connection(self) -> Iterator[sqlite3.Connection]:
+        connection = self.connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
     @staticmethod
     def _columns(connection: sqlite3.Connection, table: str) -> set[str]:
         return {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
@@ -117,14 +124,6 @@ class Storage:
                     created_at TEXT NOT NULL
                 )
             """)
-            db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_offers_creator_created
-                ON offers(creator_id, created_at)
-            """)
-            db.execute("""
-                CREATE INDEX IF NOT EXISTS idx_offers_status_expiry
-                ON offers(status, expires_at)
-            """)
 
             migrations = {
                 "allowed_users": {
@@ -140,6 +139,8 @@ class Storage:
                     "resolved_at": "TEXT",
                     "updated_at": "TEXT",
                     "language": "TEXT NOT NULL DEFAULT 'ru'",
+                    "source_chat_id": "INTEGER",
+                    "source_message_id": "INTEGER",
                 },
             }
             for table, columns in migrations.items():
@@ -149,18 +150,28 @@ class Storage:
                         db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
             db.execute("""
-                UPDATE offers
-                SET expires_at = COALESCE(
-                    expires_at,
-                    datetime(created_at, '+6 hours')
-                )
-                WHERE status = 'pending' AND expires_at IS NULL AND created_at IS NOT NULL
-            """)
-            db.execute("""
                 UPDATE allowed_users
                 SET sub_type = 'normal'
                 WHERE sub_type IS NULL OR sub_type NOT IN ('normal', 'vip')
             """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_offers_creator_created ON offers(creator_id, created_at)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_offers_status_expiry ON offers(status, expires_at)")
+
+        # Migrate old pending offers to an expiry timestamp without changing their
+        # original created_at value or relying on SQLite's locale-dependent strings.
+        with self.transaction(immediate=True) as db:
+            rows = db.execute(
+                "SELECT id, created_at FROM offers WHERE status = 'pending' AND expires_at IS NULL"
+            ).fetchall()
+            for row in rows:
+                try:
+                    created = datetime.fromisoformat(row["created_at"])
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    expires = (created + timedelta(hours=6)).astimezone(timezone.utc).isoformat()
+                except (TypeError, ValueError):
+                    expires = utc_now().isoformat()
+                db.execute("UPDATE offers SET expires_at = ? WHERE id = ?", (expires, row["id"]))
 
     def grant_access(
         self,
@@ -180,8 +191,8 @@ class Storage:
                 INSERT INTO allowed_users(user_id, username, first_name, granted_at, expires_at, sub_type)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
-                    username = excluded.username,
-                    first_name = excluded.first_name,
+                    username = COALESCE(excluded.username, allowed_users.username),
+                    first_name = COALESCE(excluded.first_name, allowed_users.first_name),
                     granted_at = excluded.granted_at,
                     expires_at = excluded.expires_at,
                     sub_type = excluded.sub_type
@@ -204,7 +215,7 @@ class Storage:
             return changed
 
     def get_access(self, user_id: int) -> dict | None:
-        with self.connect() as db:
+        with self.read_connection() as db:
             row = db.execute(
                 "SELECT user_id, username, first_name, expires_at, sub_type FROM allowed_users WHERE user_id = ?",
                 (user_id,),
@@ -271,11 +282,19 @@ class Storage:
             """, (creator_id, offer_id, f"price_stars={price_stars};recipient_id={recipient_id or ''}", now.isoformat()))
             return offer_id
 
+    def set_offer_message(self, offer_id: int, chat_id: int, message_id: int) -> None:
+        with self.transaction(immediate=True) as db:
+            db.execute(
+                "UPDATE offers SET source_chat_id = ?, source_message_id = ? WHERE id = ?",
+                (chat_id, message_id, offer_id),
+            )
+
     def get_offer(self, offer_id: int) -> dict | None:
-        with self.connect() as db:
+        with self.read_connection() as db:
             row = db.execute("""
                 SELECT id, creator_id, creator_name, creator_username, gift_name, gift_link,
-                       price, status, expires_at, recipient_id, resolved_by, resolved_at, language
+                       price, status, expires_at, recipient_id, resolved_by, resolved_at,
+                       language, source_chat_id, source_message_id
                 FROM offers WHERE id = ?
             """, (offer_id,)).fetchone()
         if not row:
@@ -289,6 +308,9 @@ class Storage:
             raise ValueError("Unsupported offer action")
         now = utc_now()
         now_iso = now.isoformat()
+        expired = False
+        resolved_offer: dict | None = None
+
         with self.transaction(immediate=True) as db:
             row = db.execute("SELECT * FROM offers WHERE id = ?", (offer_id,)).fetchone()
             if not row:
@@ -298,15 +320,13 @@ class Storage:
                 raise OfferAlreadyResolved(f"Offer already has status {offer['status']}")
 
             expiry_value = offer.get("expires_at")
-            if expiry_value:
-                try:
-                    expiry = datetime.fromisoformat(expiry_value)
-                    if expiry.tzinfo is None:
-                        expiry = expiry.replace(tzinfo=timezone.utc)
-                except ValueError:
-                    expiry = now
-            else:
+            try:
+                expiry = datetime.fromisoformat(expiry_value) if expiry_value else now
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
                 expiry = now
+
             if expiry <= now:
                 db.execute("""
                     UPDATE offers SET status = 'expired', updated_at = ?, resolved_at = ?
@@ -316,39 +336,45 @@ class Storage:
                     INSERT INTO audit_log(actor_id, action, entity_type, entity_id, details, created_at)
                     VALUES (?, 'offer.expired', 'offer', ?, '', ?)
                 """, (actor_id, offer_id, now_iso))
-                raise OfferExpired("Offer has expired")
-
-            creator_id = int(offer["creator_id"])
-            recipient_id = offer.get("recipient_id")
-            if action == "cancelled":
-                if actor_id != creator_id:
-                    raise OfferPermissionDenied("Only the offer creator may cancel it")
+                expired = True
             else:
-                if actor_id == creator_id:
-                    raise OfferPermissionDenied("The offer creator cannot accept or reject their own offer")
-                if recipient_id is not None and actor_id != int(recipient_id):
-                    raise OfferPermissionDenied("This offer is addressed to another Telegram user")
+                creator_id = int(offer["creator_id"])
+                recipient_id = offer.get("recipient_id")
+                if action == "cancelled":
+                    if actor_id != creator_id:
+                        raise OfferPermissionDenied("Only the offer creator may cancel it")
+                else:
+                    if actor_id == creator_id:
+                        raise OfferPermissionDenied("The offer creator cannot accept or reject their own offer")
+                    if recipient_id is not None and actor_id != int(recipient_id):
+                        raise OfferPermissionDenied("This offer is addressed to another Telegram user")
 
-            updated = db.execute("""
-                UPDATE offers
-                SET status = ?, accepted_at = ?, resolved_by = ?, resolved_at = ?, updated_at = ?
-                WHERE id = ? AND status = 'pending'
-            """, (
-                action,
-                now_iso if action == "accepted" else None,
-                actor_id, now_iso, now_iso, offer_id,
-            ))
-            if updated.rowcount != 1:
-                raise OfferAlreadyResolved("Offer was resolved by another action")
-            db.execute("""
-                INSERT INTO audit_log(actor_id, action, entity_type, entity_id, details, created_at)
-                VALUES (?, ?, 'offer', ?, '', ?)
-            """, (actor_id, f"offer.{action}", offer_id, now_iso))
-            offer["status"] = action
-            offer["resolved_by"] = actor_id
-            offer["resolved_at"] = now_iso
-            offer["price_stars"] = int(offer["price"])
-            return offer
+                updated = db.execute("""
+                    UPDATE offers
+                    SET status = ?, accepted_at = ?, resolved_by = ?, resolved_at = ?, updated_at = ?
+                    WHERE id = ? AND status = 'pending'
+                """, (
+                    action,
+                    now_iso if action == "accepted" else None,
+                    actor_id, now_iso, now_iso, offer_id,
+                ))
+                if updated.rowcount != 1:
+                    raise OfferAlreadyResolved("Offer was resolved by another action")
+                db.execute("""
+                    INSERT INTO audit_log(actor_id, action, entity_type, entity_id, details, created_at)
+                    VALUES (?, ?, 'offer', ?, '', ?)
+                """, (actor_id, f"offer.{action}", offer_id, now_iso))
+                offer["status"] = action
+                offer["resolved_by"] = actor_id
+                offer["resolved_at"] = now_iso
+                offer["price_stars"] = int(offer["price"])
+                resolved_offer = offer
+
+        if expired:
+            raise OfferExpired("Offer has expired")
+        if resolved_offer is None:
+            raise OfferAlreadyResolved("Offer could not be resolved")
+        return resolved_offer
 
     def expire_due_offers(self, limit: int = 500) -> list[int]:
         now = iso_now()
@@ -365,10 +391,14 @@ class Storage:
                     f"UPDATE offers SET status = 'expired', updated_at = ?, resolved_at = ? WHERE id IN ({placeholders}) AND status = 'pending'",
                     [now, now, *ids],
                 )
+                db.executemany("""
+                    INSERT INTO audit_log(actor_id, action, entity_type, entity_id, details, created_at)
+                    VALUES (0, 'offer.expired', 'offer', ?, '', ?)
+                """, [(offer_id, now) for offer_id in ids])
             return ids
 
     def list_user_offers(self, user_id: int, limit: int = 10) -> list[dict]:
-        with self.connect() as db:
+        with self.read_connection() as db:
             rows = db.execute("""
                 SELECT id, creator_id, creator_name, gift_name, gift_link, price,
                        status, created_at, expires_at, recipient_id
@@ -379,7 +409,7 @@ class Storage:
         return [dict(row) for row in rows]
 
     def stats(self) -> dict[str, int]:
-        with self.connect() as db:
+        with self.read_connection() as db:
             users = db.execute("SELECT COUNT(*) AS amount FROM allowed_users").fetchone()["amount"]
             offers = db.execute("SELECT COUNT(*) AS amount FROM offers").fetchone()["amount"]
             pending = db.execute("SELECT COUNT(*) AS amount FROM offers WHERE status = 'pending'").fetchone()["amount"]
