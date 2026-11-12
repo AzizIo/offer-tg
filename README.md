@@ -21,6 +21,7 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
 - RU, EN, Chinese, and Arabic offer cards and action buttons.
 - Inline query offer creation.
 - Telegram Business message replies and edits use the stored business connection ID.
+- Docker image and Compose deployment files.
 - Automated tests and GitHub Actions.
 
 ## Requirements
@@ -46,6 +47,16 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
        python "bot3 (1).py"
 
 The legacy filename remains as a compatibility launcher. The new implementation lives in offerbot/.
+
+### Docker Compose
+
+For a new installation:
+
+    cp .env.example .env
+    # edit .env: set BOT_TOKEN and OWNER_ID
+    docker compose up -d --build
+
+SQLite is persisted in ./data/offers.db. To migrate an existing deployment, stop the old bot and copy its actual offers.db file into ./data/offers.db before starting the container. Never run two bot processes against the same database and token at the same time.
 
 ## Environment variables
 
