@@ -21,7 +21,9 @@ Native Telegram gift-purchase offers and escrow are explicitly out of scope for 
 - Admin-only grant, revoke, and statistics commands.
 - Configurable daily offer limits for Normal and VIP.
 - RU, EN, Chinese, and Arabic offer cards and action buttons.
-- Inline query offer creation.
+- Telegram Business offer delivery from the connected profile to eligible private chats, selected from recent incoming conversations.
+- Telegram Business connection state and recent contacts are persisted; disabled connections, missing reply rights, expired contact activity, and unauthorized recipient selections are rejected.
+- Inline query offer creation remains available as a fallback.
 - Telegram Business message replies and edits use the stored business connection ID.
 - .env is loaded explicitly from the project root; process environment variables override it.
 - Docker image and Compose deployment files.
@@ -94,20 +96,30 @@ The price must be a positive whole number of Stars. Supported language codes are
 
 In a group, reply to a person's message with the offer command to address the offer to that person. Otherwise the offer is open to everyone except its creator. To let the bot see custom text messages in groups, disable BotFather Privacy Mode for the bot or grant it the required group permissions.
 
-### Send an offer to someone else
+### Send an offer from your Telegram Business profile
 
-Do not forward an existing offer card: Telegram removes its inline keyboard during forwarding.
+Business delivery is the primary workflow when you want the offer to appear as a message from your connected personal profile.
 
-To place a fresh offer with working buttons in another person's chat:
+1. In @BotFather, enable Business Mode for the bot if that option is available.
+2. In Telegram, open **Settings → Telegram Business → Chatbots**, connect Offer TG, and grant the permission to reply to messages.
+3. A recipient must have recently messaged your business profile in a private chat. Telegram only allows business replies to chats covered by the connection permissions and recent-activity rules; the bot cannot search arbitrary Telegram users or message any username at will.
+4. Open the regular private chat with Offer TG (not the business-profile conversation) and run:
+   `/businessoffer https://t.me/nft/Gift-123 100 ru`
+5. Choose a recipient from the list of recent private chats the connected profile is permitted to reply to. The bot sends the offer on behalf of your profile and stores the message and connection IDs so that the buttons, expiry and status updates can be processed.
 
-1. Enable inline mode for the bot in @BotFather with `/setinline`.
-2. Open the recipient's private chat (or the target group).
-3. Type `@BOT_USERNAME https://t.me/nft/Gift-123 100 ru`.
-4. Select the Offer TG result from the inline picker. Telegram inserts a new bot offer message with active buttons.
+The recipient list is built only from private incoming messages received while the connection is active and has reply permission. A contact disappears from the selectable list after 24 hours without new incoming activity. If Telegram rejects a send because the connection or chat is no longer eligible, the offer is marked cancelled and the bot reports the limitation. The bot does not send to arbitrary groups through this workflow.
 
-In a group, the more restrictive option is to reply directly to the recipient's message with the normal offer command. That binds the offer to that Telegram user, so other members cannot accept it.
+Custom button icons are attempted on the business message, with standard neutral buttons used only if Telegram rejects the custom icons. Whether custom icons render must be verified in the real Telegram client; Business mode alone does not guarantee it.
 
-Custom button icons require Telegram to allow `icon_custom_emoji_id` for the bot (for example, the bot owner's Telegram Premium eligibility). If the API rejects the icons, the bot automatically retries with standard buttons.
+### Inline fallback
+
+Inline mode remains available for sending bot-authored offer cards to chats where Business delivery is unavailable:
+
+1. Enable inline mode in @BotFather with `/setinline`.
+2. Type `@BOT_USERNAME https://t.me/nft/Gift-123 100 ru` in the target chat.
+3. Select the Offer TG result.
+
+Inline results are sent as bot messages, not as messages from your connected personal profile. Do not forward an existing card because Telegram may remove its inline keyboard.
 
 ## Commands
 
@@ -115,6 +127,7 @@ Custom button icons require Telegram to allow `icon_custom_emoji_id` for the bot
 - /help — usage and safety notes
 - /myoffers — recent offers created by you, addressed to you, or resolved by you
 - /canceloffer OFFER_ID — cancel your own pending offer
+- /businessoffer NFT_LINK PRICE [LANG] — choose a recent eligible private chat and send the offer from your connected Telegram Business profile
 - /grant USER_ID DAYS [normal|vip] — admin-only subscription grant; zero days means unlimited
 - /revoke USER_ID — admin-only subscription revocation
 - /stats — admin-only summary
