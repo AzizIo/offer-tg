@@ -125,6 +125,30 @@ class Storage:
                 )
             """)
 
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS business_connections (
+                    connection_id TEXT PRIMARY KEY,
+                    owner_id INTEGER NOT NULL,
+                    is_enabled INTEGER NOT NULL DEFAULT 0,
+                    can_reply INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS business_contacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    connection_id TEXT NOT NULL,
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    username TEXT,
+                    display_name TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    UNIQUE(connection_id, chat_id),
+                    FOREIGN KEY(connection_id) REFERENCES business_connections(connection_id) ON DELETE CASCADE
+                )
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_business_contacts_recent ON business_contacts(connection_id, last_seen_at DESC)")
+
             migrations = {
                 "allowed_users": {
                     "expires_at": "TEXT",
@@ -420,6 +444,74 @@ class Storage:
                 ORDER BY id DESC LIMIT ?
             """, (user_id, user_id, user_id, limit)).fetchall()
         return [dict(row) for row in rows]
+
+    def upsert_business_connection(
+        self, connection_id: str, owner_id: int, is_enabled: bool, can_reply: bool
+    ) -> None:
+        with self.transaction(immediate=True) as db:
+            db.execute("""
+                INSERT INTO business_connections(connection_id, owner_id, is_enabled, can_reply, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(connection_id) DO UPDATE SET
+                    owner_id = excluded.owner_id,
+                    is_enabled = excluded.is_enabled,
+                    can_reply = excluded.can_reply,
+                    updated_at = excluded.updated_at
+            """, (connection_id, owner_id, int(is_enabled), int(can_reply), iso_now()))
+
+    def record_business_contact(
+        self,
+        connection_id: str,
+        chat_id: int,
+        user_id: int,
+        username: str | None,
+        display_name: str,
+    ) -> None:
+        with self.transaction(immediate=True) as db:
+            connection = db.execute(
+                "SELECT is_enabled, can_reply FROM business_connections WHERE connection_id = ?",
+                (connection_id,),
+            ).fetchone()
+            if not connection or not connection["is_enabled"] or not connection["can_reply"]:
+                return
+            db.execute("""
+                INSERT INTO business_contacts(
+                    connection_id, chat_id, user_id, username, display_name, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(connection_id, chat_id) DO UPDATE SET
+                    user_id = excluded.user_id,
+                    username = excluded.username,
+                    display_name = excluded.display_name,
+                    last_seen_at = excluded.last_seen_at
+            """, (connection_id, chat_id, user_id, username, display_name[:128], iso_now()))
+
+    def list_business_contacts(self, owner_id: int, limit: int = 20) -> list[dict]:
+        cutoff = (utc_now() - timedelta(hours=24)).isoformat()
+        with self.read_connection() as db:
+            rows = db.execute("""
+                SELECT c.id, c.connection_id, c.chat_id, c.user_id, c.username,
+                       c.display_name, c.last_seen_at
+                FROM business_contacts c
+                JOIN business_connections b ON b.connection_id = c.connection_id
+                WHERE b.owner_id = ? AND b.is_enabled = 1 AND b.can_reply = 1
+                  AND c.last_seen_at >= ?
+                ORDER BY c.last_seen_at DESC
+                LIMIT ?
+            """, (owner_id, cutoff, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_business_contact(self, contact_id: int, owner_id: int) -> dict | None:
+        cutoff = (utc_now() - timedelta(hours=24)).isoformat()
+        with self.read_connection() as db:
+            row = db.execute("""
+                SELECT c.id, c.connection_id, c.chat_id, c.user_id, c.username,
+                       c.display_name, c.last_seen_at
+                FROM business_contacts c
+                JOIN business_connections b ON b.connection_id = c.connection_id
+                WHERE c.id = ? AND b.owner_id = ? AND b.is_enabled = 1 AND b.can_reply = 1
+                  AND c.last_seen_at >= ?
+            """, (contact_id, owner_id, cutoff)).fetchone()
+        return dict(row) if row else None
 
     def stats(self) -> dict[str, int]:
         with self.read_connection() as db:
