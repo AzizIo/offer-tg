@@ -17,11 +17,10 @@ EMOJI = {
 
 MESSAGES = {
     "ru": {
-        "offer_title": "Предложение о покупке подарка",
-        "price_for": "за",
-        "seller": "Отправитель",
-        "expires": "Действительно ещё",
-        "external_note": "Это предложение стороннего сервиса. Бот не резервирует Stars и не выполняет передачу подарка.",
+        "brand_label": "Offer TG · сторонний оффер",
+        "offer_sentence": "Пользователь {creator} предложил вам <b>{price} ⭐</b> за ваш подарок <a href=\"{link}\"><b>{gift}</b></a>.",
+        "expiry_line": "Истекает через <b>{time}</b>.",
+        "disclaimer": "<i>Неофициальный оффер. Stars не резервируются; оплата и передача подарка выполняются отдельно.</i>",
         "accepted": "✅ <b>Предложение принято</b>",
         "rejected": "❌ <b>Предложение отклонено</b>",
         "cancelled": "↩️ <b>Предложение отменено</b>",
@@ -46,11 +45,10 @@ MESSAGES = {
         "access_denied": "У вас нет доступа к этому действию.",
     },
     "en": {
-        "offer_title": "Gift purchase offer",
-        "price_for": "for",
-        "seller": "From",
-        "expires": "Expires in",
-        "external_note": "This offer is provided by a third-party service. The bot does not reserve Stars or transfer gifts.",
+        "brand_label": "Offer TG · third-party offer",
+        "offer_sentence": "The user {creator} offered you <b>{price} ⭐</b> for your gift <a href=\"{link}\"><b>{gift}</b></a>.",
+        "expiry_line": "Expires in <b>{time}</b>.",
+        "disclaimer": "<i>Unofficial offer. Stars are not reserved; payment and gift transfer happen separately.</i>",
         "accepted": "✅ <b>Offer accepted</b>",
         "rejected": "❌ <b>Offer declined</b>",
         "cancelled": "↩️ <b>Offer cancelled</b>",
@@ -75,11 +73,10 @@ MESSAGES = {
         "access_denied": "You are not allowed to perform this action.",
     },
     "zh": {
-        "offer_title": "礼物购买报价",
-        "price_for": "购买",
-        "seller": "发送者",
-        "expires": "剩余有效时间",
-        "external_note": "此报价由第三方服务提供。机器人不会预留 Stars，也不会转移礼物。",
+        "brand_label": "Offer TG · 第三方报价",
+        "offer_sentence": "用户 {creator} 向您提出 <b>{price} ⭐</b> 的报价，购买您的礼物 <a href=\"{link}\"><b>{gift}</b></a>。",
+        "expiry_line": "<b>{time}</b> 后过期。",
+        "disclaimer": "<i>非 Telegram 官方报价。Stars 不会被预留；付款和礼物转移由双方另行完成。</i>",
         "accepted": "✅ <b>报价已接受</b>",
         "rejected": "❌ <b>报价已拒绝</b>",
         "cancelled": "↩️ <b>报价已取消</b>",
@@ -104,11 +101,10 @@ MESSAGES = {
         "access_denied": "您无权执行此操作。",
     },
     "ar": {
-        "offer_title": "عرض شراء هدية",
-        "price_for": "مقابل",
-        "seller": "المرسل",
-        "expires": "الوقت المتبقي",
-        "external_note": "هذا عرض من خدمة خارجية. لا يحجز البوت نجوم Telegram ولا ينقل الهدايا.",
+        "brand_label": "Offer TG · عرض من خدمة خارجية",
+        "offer_sentence": "عرض عليك المستخدم {creator} مبلغ <b>{price} ⭐</b> مقابل هديتك <a href=\"{link}\"><b>{gift}</b></a>.",
+        "expiry_line": "ينتهي خلال <b>{time}</b>.",
+        "disclaimer": "<i>عرض غير رسمي. لا يتم حجز النجوم؛ ويتفق الطرفان بشكل منفصل على الدفع ونقل الهدية.</i>",
         "accepted": "✅ <b>تم قبول العرض</b>",
         "rejected": "❌ <b>تم رفض العرض</b>",
         "cancelled": "↩️ <b>تم إلغاء العرض</b>",
@@ -179,6 +175,12 @@ def format_stars(value: Any) -> str:
 
 
 def make_offer_text(offer: dict[str, Any]) -> str:
+    """Render a compact, clearly branded third-party offer.
+
+    The Bot API cannot emit Telegram's centered system service message. Keep the
+    offer content familiar, but visibly label it as Offer TG and disclose that
+    this bot does not reserve Stars or transfer the gift.
+    """
     language = str(offer.get("language") or "ru")
     creator_name = escape(str(offer["creator_name"]))
     try:
@@ -186,22 +188,27 @@ def make_offer_text(offer: dict[str, Any]) -> str:
     except (TypeError, ValueError):
         creator_id = 0
     creator = (
-        f'<a href="tg://user?id={creator_id}"><b>{creator_name}</b></a>'
+        f'<a href="tg://user?id={creator_id}">{creator_name}</a>'
         if creator_id > 0
-        else f"<b>{creator_name}</b>"
+        else creator_name
     )
     gift_name = escape(str(offer["gift_name"]))
     gift_link = escape(str(offer["gift_link"]), quote=True)
     price = format_stars(offer.get("price_stars") or offer.get("price") or 0)
-    gift = premium_emoji(EMOJI["gift"], "🎁")
-    star = premium_emoji(EMOJI["star"], "⭐")
+    time_left = remaining_time(offer.get("expires_at"), language)
+
     return (
-        f"{gift} <b>{tr(language, 'offer_title')}</b>\n\n"
-        f"<b>{price} {star}</b> {tr(language, 'price_for')} "
-        f'<a href="{gift_link}"><b>{gift_name}</b></a>\n'
-        f"{tr(language, 'seller')}: {creator}\n"
-        f"{tr(language, 'expires')}: <b>{remaining_time(offer.get('expires_at'), language)}</b>\n\n"
-        f"<i>{tr(language, 'external_note')}</i>"
+        f"<b>{tr(language, 'brand_label')}</b>\\n"
+        + tr(language, "offer_sentence").format(
+            creator=creator,
+            price=price,
+            link=gift_link,
+            gift=gift_name,
+        )
+        + "\\n"
+        + tr(language, "expiry_line").format(time=time_left)
+        + "\\n\\n"
+        + tr(language, "disclaimer")
     )
 
 
