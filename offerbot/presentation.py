@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from html import escape
 from typing import Any
 
@@ -99,17 +100,30 @@ def remaining_time(expires_at: str | None) -> str:
     return f"{hours} ч. {remainder // 60} мин."
 
 
+def format_stars(value: Any) -> str:
+    try:
+        amount = Decimal(str(value))
+        if not amount.is_finite() or amount < 0:
+            raise InvalidOperation
+        normalized = format(amount.normalize(), "f")
+        whole, separator, fraction = normalized.partition(".")
+        whole_text = f"{int(whole):,}"
+        return whole_text + (f".{fraction}" if separator else "")
+    except (InvalidOperation, ValueError, TypeError):
+        return escape(str(value))
+
+
 def make_offer_text(offer: dict[str, Any]) -> str:
     language = str(offer.get("language") or "ru")
     creator = escape(str(offer["creator_name"]))
     gift_name = escape(str(offer["gift_name"]))
     gift_link = escape(str(offer["gift_link"]), quote=True)
-    price = int(offer.get("price_stars") or offer.get("price") or 0)
+    price = format_stars(offer.get("price_stars") or offer.get("price") or 0)
     gift = premium_emoji(EMOJI["gift"], "🎁")
     star = premium_emoji(EMOJI["star"], "⭐")
     return (
         f"{gift} <b>{tr(language, 'offer_title')}</b>\n\n"
-        f"<b>{price:,} {star}</b> {tr(language, 'price_for')} "
+        f"<b>{price} {star}</b> {tr(language, 'price_for')} "
         f'<a href="{gift_link}"><b>{gift_name}</b></a>\n'
         f"{tr(language, 'seller')}: <b>{creator}</b>\n"
         f"{tr(language, 'expires')}: <b>{remaining_time(offer.get('expires_at'))}</b>\n\n"
@@ -122,8 +136,8 @@ def make_resolved_text(offer: dict[str, Any], status: str, actor_name: str) -> s
     actor = escape(actor_name)
     gift = escape(str(offer["gift_name"]))
     link = escape(str(offer["gift_link"]), quote=True)
-    price = int(offer.get("price_stars") or offer.get("price") or 0)
+    price = format_stars(offer.get("price_stars") or offer.get("price") or 0)
     title_key = status if status in {"accepted", "rejected", "cancelled", "expired"} else "expired"
     body_key = f"{title_key}_body"
-    body = tr(language, body_key).format(actor=actor, gift=gift, link=link, price=f"{price:,}")
+    body = tr(language, body_key).format(actor=actor, gift=gift, link=link, price=price)
     return f"{tr(language, title_key)}\n\n{body}\n\n<i>{tr(language, 'final_note')}</i>"
